@@ -103,6 +103,21 @@ impl<const N: usize> RequestParser<N> {
     Ok(Status::Complete(self.request(head)))
   }
 
+  /// The request of the completed head again, as views into `buf` (the bytes that were parsed,
+  /// possibly moved to another allocation), without parsing it again: one UTF-8 check of the
+  /// head, no scan, and no change of state.
+  ///
+  /// Returns [`Error::InvalidResume`] if no head is complete (before the final empty line, after
+  /// an error) or if `buf` does not hold a head of the parsed length.
+  #[inline]
+  pub fn view<'p, 'b: 'p>(&'p self, buf: &'b [u8]) -> Result<Request<'p>, Error> {
+    if !matches!(self.core.state, crate::parser::State::Done) {
+      return Err(Error::InvalidResume);
+    }
+    let head = head_str(buf, self.core.pos as usize, true)?;
+    Ok(self.request(head))
+  }
+
   fn request<'p>(&'p self, head: &'p str) -> Request<'p> {
     let core = &self.core;
     let span = |start: u32, end: u32| head.get(start as usize..end as usize).unwrap_or_default();

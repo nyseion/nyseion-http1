@@ -449,3 +449,44 @@ fn large_content_length() {
     Error::InvalidContentLength
   );
 }
+
+#[test]
+fn view_after_complete_equals_parse() {
+  for buf in common::corpus::requests() {
+    let mut parser = RequestParser::<64>::default();
+    // Fed in two pieces, so the head is completed by a resumed call.
+    let cut = buf.len() / 2;
+    let _ = parser.parse(&buf[..cut]);
+    let parsed = match parser.parse(&buf) {
+      Ok(Status::Complete(r)) => common::Req::of(&r),
+      other => panic!("{other:?}"),
+    };
+    assert_eq!(common::Req::of(&parser.view(&buf).unwrap()), parsed);
+    // The same bytes moved to another allocation.
+    let moved = buf.clone();
+    assert_eq!(common::Req::of(&parser.view(&moved).unwrap()), parsed);
+  }
+}
+
+#[test]
+fn view_before_complete_is_invalid_resume() {
+  let mut parser = RequestParser::<64>::default();
+  assert!(matches!(parser.parse(b"GET / HTTP/1.1\r\nHost: a\r\n"), Ok(Status::Partial)));
+  assert_eq!(parser.view(b"GET / HTTP/1.1\r\nHost: a\r\n").unwrap_err(), Error::InvalidResume);
+  let mut failed = RequestParser::<64>::default();
+  assert!(failed.parse(b"GET / HTTP/1.1\nHost: a\r\n\r\n").is_err());
+  assert_eq!(failed.view(b"GET / HTTP/1.1\nHost: a\r\n\r\n").unwrap_err(), Error::InvalidResume);
+}
+
+#[test]
+fn view_does_not_reset() {
+  let buf = b"GET /a?b HTTP/1.1\r\nHost: h\r\n\r\n";
+  let mut parser = RequestParser::<64>::default();
+  assert!(matches!(parser.parse(buf), Ok(Status::Complete(_))));
+  let first = common::Req::of(&parser.view(buf).unwrap());
+  let second = common::Req::of(&parser.view(buf).unwrap());
+  assert_eq!(first, second);
+  assert_eq!(first.path, "/a");
+  // A view changes nothing: the parser is still at the end of the completed head.
+  assert_eq!(common::Req::of(&parser.view(buf).unwrap()).head_len, buf.len());
+}
