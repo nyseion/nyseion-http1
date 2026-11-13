@@ -28,3 +28,5 @@ debug = "line-tables-only"
 codegen-units = 1
 lto = "fat"
 debug = "line-tables-only"
+
+[workspace]
