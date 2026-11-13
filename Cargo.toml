@@ -1,0 +1,30 @@
+[package]
+name = "rimu-http1"
+description = "Strict, resumable, zero-copy, sans-IO HTTP/1.1 parser for requests and responses, with an incremental body decoder."
+version = "0.1.0"
+edition = "2024"
+license = "Apache-2.0"
+rust-version = "1.89"
+categories = ["network-programming", "parser-implementations", "no-std::no-alloc", "web-programming::http-server"]
+keywords = ["http", "parser", "http1", "sans-io", "no_std"]
+exclude = ["bench", "fuzz"]
+
+[dependencies]
+
+[dev-dependencies]
+httparse = "1.10"
+
+[features]
+default = ["std"]
+# Runtime switch `RIMU_HTTP1_NO_AVX2` (to measure the SSE2 kernels on an AVX2 machine).
+std = []
+
+[profile.release]
+codegen-units = 1
+lto = "fat"
+debug = "line-tables-only"
+
+[profile.bench]
+codegen-units = 1
+lto = "fat"
+debug = "line-tables-only"
