@@ -548,6 +548,10 @@ pub(crate) mod x86 {
   /// AVX2 support from `cpuid`, including the operating system saving the YMM registers.
   #[cfg(not(target_feature = "avx2"))]
   fn cpu_has_avx2() -> bool {
+    // Miri cannot run `cpuid`; it checks the SSE2 kernels.
+    if cfg!(miri) {
+      return false;
+    }
     #[allow(unused_unsafe, reason = "`__cpuid` became safe in recent toolchains")]
     // SAFETY: `cpuid` is on every x86-64 CPU; `xgetbv` runs only when OSXSAVE says it can.
     unsafe {
@@ -605,7 +609,7 @@ mod tests {
   #[test]
   fn name_kernel_matches_table_for_every_byte() {
     for byte in 0..=255u8 {
-      for pos in 0..40 {
+      for pos in (0..40).step_by(if cfg!(miri) { 13 } else { 1 }) {
         let mut buf = [b'a'; 40];
         buf[pos] = byte;
         kernels_name(&buf, 0, 40);
@@ -641,7 +645,13 @@ mod tests {
   #[test]
   fn kernels_match_scalar() {
     let specials: &[u8] = &[0, 9, 10, 13, 0x1f, b' ', b'#', b'?', 0x7e, 0x7f, 0x80, 0xc3, 0xff];
-    for len in [0usize, 1, 7, 8, 9, 15, 16, 17, 31, 32, 33, 47, 63, 64, 65, 100] {
+    // Miri is slow: a smaller grid that still crosses every block boundary of the kernels.
+    let lens: &[usize] = if cfg!(miri) {
+      &[0, 9, 17, 33, 65, 70]
+    } else {
+      &[0, 1, 7, 8, 9, 15, 16, 17, 31, 32, 33, 47, 63, 64, 65, 100]
+    };
+    for &len in lens {
       for &special in specials {
         for pos in 0..len.max(1) {
           let mut buf = vec![b'a'; len];

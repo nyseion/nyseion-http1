@@ -261,10 +261,7 @@ fn compare_response(method: Method, buf: &[u8], tally: &mut BTreeMap<String, usi
         Error::InvalidTransferEncoding => {
           "Transfer-Encoding with chunked twice or not last (RFC 9112 §6.1)"
         }
-        _ => panic!(
-          "unexplained: rimu-http1 {e:?}, httparse accepts {:?}",
-          show(buf)
-        ),
+        _ => panic!("unexplained: rimu-http1 {e:?}, httparse accepts {:?}", show(buf)),
       };
       format!("rimu-http1 rejects: {c}")
     }

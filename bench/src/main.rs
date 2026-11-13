@@ -285,7 +285,7 @@ fn main() {
   ];
 
   println!(
-    "ns per head (median of 9), one core. `4 reads` / `byte by byte`: the head arrives in 4 / len reads and every parser is called after each read (httparse and rimu-ws re-parse from the start; rimu-http1 resumes).\n"
+    "ns per head: minimum over 41 interleaved rounds; ratios: median over rounds of other / rimu-http1 (>1: rimu-http1 faster). One core. `4 reads` / `byte by byte`: the head arrives in 4 / len reads and every parser is called after each read (httparse and rimu-ws re-parse from the start; rimu-http1 resumes).\n"
   );
   println!("### Requests, whole\n");
   println!(

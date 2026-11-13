@@ -48,6 +48,13 @@ offsets: zero copies, and nothing to fix up when the buffer moved.
 After a `Complete`, the next `parse` call starts a new message (the caller passes the buffer
 from the first byte after `head_len` plus the body). `reset()` abandons a message.
 
+**Soundness when the contract is broken.** Views are `&str`. Bytes validated in the call that
+completes the head are known to be UTF-8. If earlier calls consumed some bytes, the caller could
+have changed them since, so at completion the head is checked once more with
+`core::str::from_utf8` (once per message: total work stays linear) and views are taken with
+`str::get`, which checks character boundaries; a changed buffer gives `Error::InvalidResume`, never
+an invalid `str`. A buffer shorter than what was consumed is `InvalidResume` too.
+
 ## 3. The state machine
 
 One `loop { match state { .. } }` over the buffer. Each arm consumes as much as it can and
@@ -77,8 +84,10 @@ Response start-line states: `Version` (needs `HTTP/d.d SP`), `Status` (needs `dd
 a header name or value that was cut in the middle is not re-scanned. The only bytes ever looked
 at twice are bounded per call:
 
-- fixed-width pieces (`HTTP/1.1\r\n`, `ddd SP`) are matched only when all their bytes are present;
-  until then the state waits without consuming (at most 9 bytes re-examined per call);
+- fixed-width pieces (`HTTP/1.1\r\n`, `ddd SP`) are re-examined from their start on each call
+  until complete (at most 9 bytes per call). The bytes not received yet are taken from a valid
+  template (`HTTP/1.1\r\n`, `100 `) and the full checks run in their usual order, so a bad prefix
+  is rejected at once, with exactly the error the complete piece would get;
 - a UTF-8 sequence cut by the end of the input is re-examined from its first byte (≤ 3 bytes);
 - the trimming of trailing whitespace of a value at its end, and the special-header checks
   (below), look at each value once more after it is complete, which is O(bytes) overall.
@@ -106,13 +115,16 @@ so there is no separate UTF-8 or control-character pass.
   place (2–4 bytes, RFC 3629 ranges, no overlongs or surrogates) before the vector scan goes on;
   anything else (LF, NUL, other controls, DEL) is an error. Values are therefore valid UTF-8 and
   are handed out as `&str` without a second check.
-- **Method and header name**: a 256-entry `tchar` table, scalar (names are short; a vector
-  `tchar` test needs a byte shuffle that SSE2 lacks).
+- **Header name**: the first byte that is not a `tchar`, 16 bytes a step with SSE2: one signed
+  compare for "visible ASCII" plus equality and range compares for the 17 visible delimiters
+  (`"(),/:;<=>?@[\]{}` and DEL). (Profiling showed the scalar table loop at ~40% of the time
+  for a 40-field head.) The method uses the 256-entry table (it is short and has a `GET `/`POST `
+  fast path).
 
 Kernels (`scan.rs`):
 
 - **x86-64**: SSE2 (baseline) 16 bytes a step, inline. Values and targets are mostly short, so
-  the first 32 bytes are always scanned inline with SSE2; only if no stop byte was found there
+  the first 64 bytes are always scanned inline with SSE2; only if no stop byte was found there
   does the scan call the AVX2 kernel (32 bytes a step), chosen once at run time with `cpuid`
   (cached in an `AtomicU8`, as `rimu-json`'s `escape.rs` does) so the out-of-line call is paid
   only by long values (cookies, user agents, tokens). With `target-feature=+avx2` at compile time
@@ -125,6 +137,11 @@ Kernels (`scan.rs`):
 
 Fast paths that keep whole-request parsing ahead of httparse:
 
+- complete field lines are parsed by a tight loop inside the `LineStart` state that keeps the
+  line's offsets in registers (name scan, colon, value scan, CR LF, semantic checks, slot) and
+  only stores a state when a line is cut by the end of the input, too long, or contains a byte
+  that needs the slow path (non-ASCII, an error); the `Name` / `Value` states then continue from
+  the exact byte where the loop stopped;
 - method `GET ` / `POST` recognised by one 4-byte compare, other methods via the table;
 - `HTTP/1.1\r\n` checked as one 8-byte and one 2-byte compare;
 - special headers dispatched on the name length first (4 `host`, 6 `expect`, 7 `upgrade`,
