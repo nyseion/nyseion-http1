@@ -456,7 +456,7 @@ impl<const N: usize, const REQ: bool> Core<N, REQ> {
             self.reason_end = j as u32;
             self.state = State::ReasonLf;
           } else {
-            self.field(buf, j)?;
+            self.field(buf, self.line_start as usize, self.mark as usize, j)?;
             self.state = State::ValueLf;
           }
           i = j + 1;
@@ -472,21 +472,68 @@ impl<const N: usize, const REQ: bool> Core<N, REQ> {
           self.state = State::LineStart;
         }
         State::LineStart => {
-          let Some(&byte) = buf.get(i).filter(|_| i < end) else {
-            return self.wait_or_limit(i, usize::MAX, len);
-          };
-          self.line_start = i as u32;
-          i += 1;
-          if is_tchar(byte) {
-            self.state = State::Name;
-          } else if byte == b'\r' {
-            self.state = State::EndLf;
-          } else if byte == b' ' || byte == b'\t' {
-            return Err(Error::WhitespaceBeforeName);
-          } else if byte == b'\n' {
-            return Err(Error::InvalidLineEnding);
-          } else {
-            return Err(Error::InvalidHeaderName);
+          // Fast loop over complete field lines, with the line's offsets in registers. Any
+          // line that is cut by the end of the input, too long, or not plain ASCII is left to
+          // the resumable `Name` / `Value` states, which pick it up where this loop stopped.
+          loop {
+            let Some(&byte) = buf.get(i).filter(|_| i < end) else {
+              return self.wait_or_limit(i, usize::MAX, len);
+            };
+            if !is_tchar(byte) {
+              self.line_start = i as u32;
+              i += 1;
+              if byte == b'\r' {
+                self.state = State::EndLf;
+                break;
+              } else if byte == b' ' || byte == b'\t' {
+                return Err(Error::WhitespaceBeforeName);
+              } else if byte == b'\n' {
+                return Err(Error::InvalidLineEnding);
+              }
+              return Err(Error::InvalidHeaderName);
+            }
+            let line_start = i;
+            let line_limit =
+              line_start.saturating_add(self.config.max_line_len as usize).saturating_add(1);
+            let window = buf.get(..end.min(line_limit)).unwrap_or_default();
+            let mut j = i + 1;
+            while let Some(&b) = window.get(j) {
+              if !TCHAR[usize::from(b)] {
+                break;
+              }
+              j += 1;
+            }
+            if window.get(j) != Some(&b':') {
+              // Cut, too long or invalid: the `Name` state decides.
+              self.line_start = line_start as u32;
+              self.state = State::Name;
+              i = j;
+              break;
+            }
+            let mut k = j + 1;
+            loop {
+              k = value_stop(buf, k, window.len());
+              match window.get(k) {
+                Some(b'\t') => k += 1,
+                _ => break,
+              }
+            }
+            if window.get(k) != Some(&b'\r') {
+              // Cut, too long, non-ASCII or invalid: the `Value` state decides.
+              self.line_start = line_start as u32;
+              self.mark = j as u32;
+              self.state = State::Value;
+              i = k;
+              break;
+            }
+            self.field(buf, line_start, j, k)?;
+            if buf.get(k + 1).filter(|_| k + 1 < end) == Some(&b'\n') {
+              i = k + 2;
+            } else {
+              self.state = State::ValueLf;
+              i = k + 1;
+              break;
+            }
           }
         }
         State::Name => {
@@ -612,11 +659,16 @@ impl<const N: usize, const REQ: bool> Core<N, REQ> {
     Ok(())
   }
 
-  /// A field line whose value ends at the CR at `cr`: semantic checks, then a slot.
-  #[inline]
-  fn field(&mut self, buf: &[u8], cr: usize) -> Result<(), Error> {
-    let name_start = self.line_start as usize;
-    let name_end = self.mark as usize;
+  /// A field line: the name is `name_start..name_end`, the value ends at the CR at `cr`.
+  /// Semantic checks, then a slot.
+  #[inline(always)]
+  fn field(
+    &mut self,
+    buf: &[u8],
+    name_start: usize,
+    name_end: usize,
+    cr: usize,
+  ) -> Result<(), Error> {
     let mut vs = name_end + 1;
     let mut ve = cr;
     while vs < ve && matches!(buf.get(vs), Some(b' ' | b'\t')) {

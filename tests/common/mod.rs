@@ -3,6 +3,9 @@
 //! buffer really moves between calls).
 #![allow(dead_code, reason = "each test file uses a subset")]
 
+pub mod corpus;
+pub mod ported_inputs;
+
 use rimu_http1::{
   BodyDecoder, BodyKind, BodyStatus, Config, Error, Method, Request, RequestParser, Response,
   ResponseParser, Status, Version,
