@@ -7,7 +7,7 @@
 
 use crate::{
   Config, Error, Method,
-  scan::{NO_QUERY, TCHAR, Utf8Error, is_tchar, target_stop, utf8_len, value_stop},
+  scan::{NO_QUERY, Utf8Error, is_tchar, name_stop, target_stop, utf8_len, value_stop},
 };
 
 /// Offsets of one field line in the head: the name and the value without surrounding
@@ -496,13 +496,7 @@ impl<const N: usize, const REQ: bool> Core<N, REQ> {
             let line_limit =
               line_start.saturating_add(self.config.max_line_len as usize).saturating_add(1);
             let window = buf.get(..end.min(line_limit)).unwrap_or_default();
-            let mut j = i + 1;
-            while let Some(&b) = window.get(j) {
-              if !TCHAR[usize::from(b)] {
-                break;
-              }
-              j += 1;
-            }
+            let j = name_stop(buf, i + 1, window.len());
             if window.get(j) != Some(&b':') {
               // Cut, too long or invalid: the `Name` state decides.
               self.line_start = line_start as u32;
@@ -538,15 +532,8 @@ impl<const N: usize, const REQ: bool> Core<N, REQ> {
         }
         State::Name => {
           let wend = end.min(self.line_limit());
-          let mut j = i;
-          let name = buf.get(..wend).unwrap_or_default();
-          while let Some(&byte) = name.get(j) {
-            if !TCHAR[usize::from(byte)] {
-              break;
-            }
-            j += 1;
-          }
-          let Some(&byte) = name.get(j) else {
+          let j = name_stop(buf, i, wend);
+          let Some(&byte) = buf.get(j).filter(|_| j < wend) else {
             return self.wait_or_limit(j, self.line_limit(), len);
           };
           // No whitespace before the colon (RFC 9112 §5.1).

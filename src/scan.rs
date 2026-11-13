@@ -82,6 +82,27 @@ pub(crate) fn target_stop(buf: &[u8], i: usize, end: usize, query: &mut usize) -
   }
 }
 
+/// Index of the first byte of `buf[i..end]` that is not a `tchar`, or `end`.
+#[inline(always)]
+pub(crate) fn name_stop(buf: &[u8], i: usize, end: usize) -> usize {
+  debug_assert!(i <= end && end <= buf.len());
+  #[cfg(target_arch = "x86_64")]
+  {
+    x86::name_stop(buf, i, end)
+  }
+  #[cfg(not(target_arch = "x86_64"))]
+  {
+    name_stop_scalar(buf, i, end)
+  }
+}
+
+/// Reference version of [`name_stop`].
+#[inline]
+pub(crate) fn name_stop_scalar(buf: &[u8], i: usize, end: usize) -> usize {
+  let tail = buf.get(i..end).unwrap_or_default();
+  tail.iter().position(|b| !is_tchar(*b)).map_or(end, |p| i + p)
+}
+
 /// Reference version of [`value_stop`].
 #[inline]
 pub(crate) fn value_stop_scalar(buf: &[u8], i: usize, end: usize) -> usize {
@@ -227,7 +248,45 @@ pub(crate) mod x86 {
   use core::sync::atomic::{AtomicU8, Ordering};
 
   /// Bytes scanned inline with SSE2 before switching to the long-run kernel.
-  const INLINE: usize = 32;
+  const INLINE: usize = 64;
+
+  /// Mask of the bytes of `v` that are not `tchar`s: controls, SP, DEL, non-ASCII, and the
+  /// visible delimiters `"(),/:;<=>?@[\]{}`.
+  #[inline(always)]
+  fn non_tchar_mask(v: __m128i) -> u32 {
+    // SAFETY: SSE2 is part of the x86-64 baseline.
+    unsafe {
+      let eq = |c: u8| _mm_cmpeq_epi8(v, _mm_set1_epi8(c.cast_signed()));
+      // Unsigned `lo <= v <= hi`: `v - lo` wraps above `hi - lo` otherwise.
+      let range = |lo: u8, hi: u8| {
+        let x = _mm_sub_epi8(v, _mm_set1_epi8(lo.cast_signed()));
+        _mm_cmpeq_epi8(_mm_min_epu8(x, _mm_set1_epi8((hi - lo).cast_signed())), x)
+      };
+      // Signed compare: true exactly for 0x21..=0x7f.
+      let visible = _mm_cmpgt_epi8(v, _mm_set1_epi8(0x20));
+      let a = _mm_or_si128(_mm_or_si128(eq(0x7f), eq(b'"')), _mm_or_si128(range(b'(', b')'), eq(b',')));
+      let b = _mm_or_si128(_mm_or_si128(eq(b'/'), range(b':', b'@')), range(b'[', b']'));
+      let c = _mm_or_si128(eq(b'{'), eq(b'}'));
+      let bad = _mm_or_si128(_mm_or_si128(a, b), c);
+      (_mm_movemask_epi8(visible).cast_unsigned() ^ 0xffff) | _mm_movemask_epi8(bad).cast_unsigned()
+    }
+  }
+
+  /// [`super::name_stop`].
+  #[inline(always)]
+  pub(crate) fn name_stop(buf: &[u8], mut i: usize, end: usize) -> usize {
+    while i < end {
+      let Some(v) = load16(buf, i) else {
+        return super::name_stop_scalar(buf, i, end);
+      };
+      let mask = non_tchar_mask(v);
+      if mask != 0 {
+        return (i + mask.trailing_zeros() as usize).min(end);
+      }
+      i += 16;
+    }
+    end
+  }
 
   /// Stop mask of 16 value bytes: bytes outside `0x20..=0x7e`.
   #[inline(always)]
@@ -534,6 +593,23 @@ mod tests {
       if x86::has_avx2() {
         // SAFETY: checked above.
         assert_eq!(unsafe { x86::value_stop_avx2(buf, i, end) }, expected);
+      }
+    }
+  }
+
+  fn kernels_name(buf: &[u8], i: usize, end: usize) {
+    assert_eq!(name_stop(buf, i, end), name_stop_scalar(buf, i, end), "{buf:?} {i} {end}");
+  }
+
+  #[test]
+  fn name_kernel_matches_table_for_every_byte() {
+    for byte in 0..=255u8 {
+      for pos in 0..40 {
+        let mut buf = [b'a'; 40];
+        buf[pos] = byte;
+        kernels_name(&buf, 0, 40);
+        kernels_name(&buf, 0, pos);
+        kernels_name(&buf, 1, 33);
       }
     }
   }

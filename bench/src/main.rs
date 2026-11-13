@@ -6,25 +6,43 @@
 use rimu_http1::{BodyKind, Config, Method, RequestParser, ResponseParser, Status};
 use std::{hint::black_box, time::Instant};
 
-fn time(mut f: impl FnMut() -> usize) -> f64 {
-  let t = Instant::now();
-  let mut n = 0u64;
-  while t.elapsed().as_millis() < 30 {
-    black_box(f());
-    n += 1;
-  }
-  let iters = ((30e6 / (t.elapsed().as_nanos() as f64 / n as f64)) as u64).max(1);
-  let mut s: Vec<f64> = (0..9)
-    .map(|_| {
+/// Times the contenders interleaved: 41 rounds, each running every contender for ~2 ms.
+/// Returns, per contender, the minimum time per call and the median over rounds of
+/// `time(contender) / time(last contender)`. Interleaving makes the ratios robust on a shared
+/// machine, where load and clock speed change from one moment to the next.
+fn measure(fs: &mut [&mut dyn FnMut() -> usize]) -> Vec<(f64, f64)> {
+  let iters: Vec<u64> = fs
+    .iter_mut()
+    .map(|f| {
       let t = Instant::now();
-      for _ in 0..iters {
+      let mut n = 0u64;
+      while t.elapsed().as_millis() < 10 {
         black_box(f());
+        n += 1;
       }
-      t.elapsed().as_nanos() as f64 / iters as f64
+      ((2e6 / (t.elapsed().as_nanos() as f64 / n as f64)) as u64).max(1)
     })
     .collect();
-  s.sort_by(|a, b| a.partial_cmp(b).unwrap());
-  s[4]
+  let rounds = 41;
+  let mut samples = vec![Vec::with_capacity(rounds); fs.len()];
+  for _ in 0..rounds {
+    for (k, f) in fs.iter_mut().enumerate() {
+      let t = Instant::now();
+      for _ in 0..iters[k] {
+        black_box(f());
+      }
+      samples[k].push(t.elapsed().as_nanos() as f64 / iters[k] as f64);
+    }
+  }
+  let last = samples.len() - 1;
+  (0..samples.len())
+    .map(|k| {
+      let min = samples[k].iter().copied().fold(f64::INFINITY, f64::min);
+      let mut ratios: Vec<f64> = (0..rounds).map(|r| samples[k][r] / samples[last][r]).collect();
+      ratios.sort_by(|a, b| a.partial_cmp(b).unwrap());
+      (min, ratios[rounds / 2])
+    })
+    .collect()
 }
 
 /// Facts every contender extracts: (head length, path+query length + body + keep-alive).
@@ -287,24 +305,33 @@ fn main() {
     assert_eq!(httparse_strict(buf), Some(a), "{name}");
     assert_eq!(old(buf, &mut scratch), Some(a), "{name}");
     assert_eq!(ours(&mut parser, buf), Some(a), "{name}");
-    let raw = time(|| httparse_raw(black_box(buf)).unwrap());
-    let framed = time(|| httparse_framed(black_box(buf)).unwrap().1);
-    let strict = time(|| httparse_strict(black_box(buf)).unwrap().1);
-    let o = time(|| old(black_box(buf), &mut scratch).unwrap().1);
-    let r = time(|| ours(&mut parser, black_box(buf)).unwrap().1);
+    let m = measure(&mut [
+      &mut || httparse_raw(black_box(buf)).unwrap(),
+      &mut || httparse_framed(black_box(buf)).unwrap().1,
+      &mut || httparse_strict(black_box(buf)).unwrap().1,
+      &mut || old(black_box(buf), &mut scratch).unwrap().1,
+      &mut || ours(&mut parser, black_box(buf)).unwrap().1,
+    ]);
     println!(
-      "| {name} | {} | {raw:.0} | {framed:.0} | {strict:.0} | {o:.0} | **{r:.0}** | {:.2}× | {:.2}× | {:.2}× |",
+      "| {name} | {} | {:.0} | {:.0} | {:.0} | {:.0} | **{:.0}** | {:.2}× | {:.2}× | {:.2}× |",
       buf.len(),
-      framed / r,
-      strict / r,
-      o / r
+      m[0].0,
+      m[1].0,
+      m[2].0,
+      m[3].0,
+      m[4].0,
+      m[1].1,
+      m[2].1,
+      m[3].1
     );
     let mut row = Vec::new();
     for parts in [4, buf.len()] {
-      let f = time(|| split(buf, parts, &mut |b| httparse_framed(black_box(b)).is_some()));
-      let o = time(|| split(buf, parts, &mut |b| old(black_box(b), &mut scratch).is_some()));
-      let r = time(|| split(buf, parts, &mut |b| ours(&mut parser, black_box(b)).is_some()));
-      row.push((f, o, r));
+      let m = measure(&mut [
+        &mut || split(buf, parts, &mut |b| httparse_framed(black_box(b)).is_some()),
+        &mut || split(buf, parts, &mut |b| old(black_box(b), &mut scratch).is_some()),
+        &mut || split(buf, parts, &mut |b| ours(&mut parser, black_box(b)).is_some()),
+      ]);
+      row.push(m);
     }
     split_rows.push((name, buf.len(), row));
   }
@@ -314,15 +341,11 @@ fn main() {
   );
   println!("|---|---|---|---|---|");
   for (name, len, row) in split_rows {
-    let (f4, o4, r4) = row[0];
-    let (fb, ob, rb) = row[1];
+    let (f4, o4, r4) = (row[0][0], row[0][1], row[0][2]);
+    let (fb, ob, rb) = (row[1][0], row[1][1], row[1][2]);
     println!(
-      "| {name} | {len} | {f4:.0} / {o4:.0} / **{r4:.0}** ({:.2}× / {:.2}×) | {fb:.0} / {ob:.0} / **{rb:.0}** ({:.1}× / {:.1}×) | {:.1} |",
-      f4 / r4,
-      o4 / r4,
-      fb / rb,
-      ob / rb,
-      rb / len as f64
+      "| {name} | {len} | {:.0} / {:.0} / **{:.0}** ({:.2}× / {:.2}×) | {:.0} / {:.0} / **{:.0}** ({:.1}× / {:.1}×) | {:.1} |",
+      f4.0, o4.0, r4.0, f4.1, o4.1, fb.0, ob.0, rb.0, fb.1, ob.1, rb.0 / len as f64
     );
   }
   println!("\n### Responses (rimu-ws has no response parser)\n");
@@ -335,19 +358,30 @@ fn main() {
     let buf = res.as_bytes();
     let a = httparse_response(buf).expect("httparse");
     assert_eq!(ours_response(&mut rparser, buf), Some(a), "{name}");
-    let h = time(|| httparse_response(black_box(buf)).unwrap().1);
-    let r = time(|| ours_response(&mut rparser, black_box(buf)).unwrap().1);
-    let h4 = time(|| split(buf, 4, &mut |b| httparse_response(black_box(b)).is_some()));
-    let r4 = time(|| split(buf, 4, &mut |b| ours_response(&mut rparser, black_box(b)).is_some()));
-    let hb = time(|| split(buf, buf.len(), &mut |b| httparse_response(black_box(b)).is_some()));
-    let rb =
-      time(|| split(buf, buf.len(), &mut |b| ours_response(&mut rparser, black_box(b)).is_some()));
+    let m = measure(&mut [
+      &mut || httparse_response(black_box(buf)).unwrap().1,
+      &mut || ours_response(&mut rparser, black_box(buf)).unwrap().1,
+    ]);
+    let m4 = measure(&mut [
+      &mut || split(buf, 4, &mut |b| httparse_response(black_box(b)).is_some()),
+      &mut || split(buf, 4, &mut |b| ours_response(&mut rparser, black_box(b)).is_some()),
+    ]);
+    let mb = measure(&mut [
+      &mut || split(buf, buf.len(), &mut |b| httparse_response(black_box(b)).is_some()),
+      &mut || split(buf, buf.len(), &mut |b| ours_response(&mut rparser, black_box(b)).is_some()),
+    ]);
     println!(
-      "| {name} | {} | {h:.0} | **{r:.0}** | {:.2}× | {h4:.0} / **{r4:.0}** ({:.2}×) | {hb:.0} / **{rb:.0}** ({:.1}×) |",
+      "| {name} | {} | {:.0} | **{:.0}** | {:.2}× | {:.0} / **{:.0}** ({:.2}×) | {:.0} / **{:.0}** ({:.1}×) |",
       buf.len(),
-      h / r,
-      h4 / r4,
-      hb / rb
+      m[0].0,
+      m[1].0,
+      m[0].1,
+      m4[0].0,
+      m4[1].0,
+      m4[0].1,
+      mb[0].0,
+      mb[1].0,
+      mb[0].1
     );
   }
 }
