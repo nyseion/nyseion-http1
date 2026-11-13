@@ -242,13 +242,9 @@ fn httparse_response(buf: &[u8]) -> Option<Facts> {
 fn ours_response(parser: &mut ResponseParser, buf: &[u8]) -> Option<Facts> {
   match parser.parse(buf, Method::Get).ok()? {
     Status::Partial => None,
-    Status::Complete(r) => Some((
-      r.head_len,
-      usize::from(r.status)
-        + body_num(r.body)
-       
-        + usize::from(r.keep_alive),
-    )),
+    Status::Complete(r) => {
+      Some((r.head_len, usize::from(r.status) + body_num(r.body) + usize::from(r.keep_alive)))
+    }
   }
 }
 
@@ -345,7 +341,17 @@ fn main() {
     let (fb, ob, rb) = (row[1][0], row[1][1], row[1][2]);
     println!(
       "| {name} | {len} | {:.0} / {:.0} / **{:.0}** ({:.2}× / {:.2}×) | {:.0} / {:.0} / **{:.0}** ({:.1}× / {:.1}×) | {:.1} |",
-      f4.0, o4.0, r4.0, f4.1, o4.1, fb.0, ob.0, rb.0, fb.1, ob.1, rb.0 / len as f64
+      f4.0,
+      o4.0,
+      r4.0,
+      f4.1,
+      o4.1,
+      fb.0,
+      ob.0,
+      rb.0,
+      fb.1,
+      ob.1,
+      rb.0 / len as f64
     );
   }
   println!("\n### Responses (rimu-ws has no response parser)\n");
@@ -358,10 +364,9 @@ fn main() {
     let buf = res.as_bytes();
     let a = httparse_response(buf).expect("httparse");
     assert_eq!(ours_response(&mut rparser, buf), Some(a), "{name}");
-    let m = measure(&mut [
-      &mut || httparse_response(black_box(buf)).unwrap().1,
-      &mut || ours_response(&mut rparser, black_box(buf)).unwrap().1,
-    ]);
+    let m = measure(&mut [&mut || httparse_response(black_box(buf)).unwrap().1, &mut || {
+      ours_response(&mut rparser, black_box(buf)).unwrap().1
+    }]);
     let m4 = measure(&mut [
       &mut || split(buf, 4, &mut |b| httparse_response(black_box(b)).is_some()),
       &mut || split(buf, 4, &mut |b| ours_response(&mut rparser, black_box(b)).is_some()),

@@ -6,10 +6,14 @@ fn main() {
   let args: Vec<String> = std::env::args().collect();
   let mut many = String::from("GET /many HTTP/1.1\r\nHost: example.com\r\n");
   for i in 0..40 {
-    many.push_str(&format!("X-Custom-Header-{i}: value-{i}-abcdefghijklmnopqrstuvwxyz0123456789\r\n"));
+    many.push_str(&format!(
+      "X-Custom-Header-{i}: value-{i}-abcdefghijklmnopqrstuvwxyz0123456789\r\n"
+    ));
   }
   many.push_str("\r\n");
-  let curl = "GET / HTTP/1.1\r\nHost: localhost:8080\r\nUser-Agent: curl/8.5.0\r\nAccept: */*\r\n\r\n".to_string();
+  let curl =
+    "GET / HTTP/1.1\r\nHost: localhost:8080\r\nUser-Agent: curl/8.5.0\r\nAccept: */*\r\n\r\n"
+      .to_string();
   let buf = if args.get(2).map(String::as_str) == Some("curl") { curl } else { many };
   let buf = buf.as_bytes();
   let secs: u64 = args.get(3).and_then(|s| s.parse().ok()).unwrap_or(3);
