@@ -355,9 +355,9 @@ impl<const N: usize, const REQ: bool> Core<N, REQ> {
           if i + 8 > self.line_limit() - 1 || i + 10 > head_limit {
             return Err(Error::UriTooLong);
           }
-          let Some(v) = buf.get(i..i + 10) else {
-            return self.wait(i);
-          };
+          // Bytes not received yet are taken from a valid template, so a bad prefix is
+          // rejected at once, with the error the whole piece would get.
+          let (v, complete) = fixed::<10>(buf, i, b"HTTP/1.1\r\n");
           if !(v.starts_with(b"HTTP/") && v[5].is_ascii_digit() && v[6] == b'.')
             || !v[7].is_ascii_digit()
           {
@@ -367,6 +367,9 @@ impl<const N: usize, const REQ: bool> Core<N, REQ> {
             (b'\r', b'\n') => {}
             (b'\r' | b'\n', _) => return Err(Error::InvalidLineEnding),
             _ => return Err(Error::InvalidVersion),
+          }
+          if !complete {
+            return self.wait(i);
           }
           if v[5] != b'1' {
             return Err(Error::VersionNotSupported);
@@ -380,9 +383,7 @@ impl<const N: usize, const REQ: bool> Core<N, REQ> {
           if i + 9 > self.line_limit() - 1 || i + 9 > head_limit {
             return Err(Error::HeadTooLarge);
           }
-          let Some(v) = buf.get(i..i + 9) else {
-            return self.wait(i);
-          };
+          let (v, complete) = fixed::<9>(buf, i, b"HTTP/1.1 ");
           if !(v.starts_with(b"HTTP/") && v[5].is_ascii_digit() && v[6] == b'.')
             || !v[7].is_ascii_digit()
           {
@@ -392,6 +393,9 @@ impl<const N: usize, const REQ: bool> Core<N, REQ> {
             b' ' => {}
             b'\r' | b'\n' => return Err(Error::InvalidLineEnding),
             _ => return Err(Error::InvalidVersion),
+          }
+          if !complete {
+            return self.wait(i);
           }
           if v[5] != b'1' {
             return Err(Error::VersionNotSupported);
@@ -404,9 +408,9 @@ impl<const N: usize, const REQ: bool> Core<N, REQ> {
           if i + 4 > self.line_limit() - 1 || i + 4 > head_limit {
             return Err(Error::HeadTooLarge);
           }
-          let Some(v) = buf.get(i..i + 4) else {
-            return self.wait(i);
-          };
+          // With the template's digits, an incomplete code is judged by its lowest completion,
+          // which is out of range exactly when every completion is.
+          let (v, complete) = fixed::<4>(buf, i, b"100 ");
           // RFC 9112 §4: `status-code SP`, the space even before an empty reason.
           if !v[..3].iter().all(u8::is_ascii_digit) || v[3] != b' ' {
             return Err(Error::InvalidStatus);
@@ -416,6 +420,9 @@ impl<const N: usize, const REQ: bool> Core<N, REQ> {
           // RFC 9110 §15: all valid status codes are 100 to 599.
           if !(100..=599).contains(&status) {
             return Err(Error::InvalidStatus);
+          }
+          if !complete {
+            return self.wait(i);
           }
           self.status = status;
           i += 4;
@@ -837,6 +844,20 @@ impl<const N: usize, const REQ: bool> Core<N, REQ> {
     };
     Ok(Framing { body, keep_alive, expect_continue: false, upgrade: status == 101 || tunnel })
   }
+}
+
+/// The `L` bytes at `i`, with those not received yet taken from `template`, and if all were
+/// received.
+#[inline(always)]
+fn fixed<const L: usize>(buf: &[u8], i: usize, template: &[u8; L]) -> ([u8; L], bool) {
+  if let Some(Ok(v)) = buf.get(i..i + L).map(<[u8; L]>::try_from) {
+    return (v, true);
+  }
+  let mut v = *template;
+  let have = buf.get(i..).unwrap_or_default();
+  let n = have.len().min(L);
+  v[..n].copy_from_slice(&have[..n]);
+  (v, false)
 }
 
 /// `bytes` (`tchar`s) equal to the lowercase `lit`, ignoring ASCII case. OR-ing `0x20` maps an

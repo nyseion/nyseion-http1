@@ -264,7 +264,8 @@ pub(crate) mod x86 {
       };
       // Signed compare: true exactly for 0x21..=0x7f.
       let visible = _mm_cmpgt_epi8(v, _mm_set1_epi8(0x20));
-      let a = _mm_or_si128(_mm_or_si128(eq(0x7f), eq(b'"')), _mm_or_si128(range(b'(', b')'), eq(b',')));
+      let a =
+        _mm_or_si128(_mm_or_si128(eq(0x7f), eq(b'"')), _mm_or_si128(range(b'(', b')'), eq(b',')));
       let b = _mm_or_si128(_mm_or_si128(eq(b'/'), range(b':', b'@')), range(b'[', b']'));
       let c = _mm_or_si128(eq(b'{'), eq(b'}'));
       let bad = _mm_or_si128(_mm_or_si128(a, b), c);
