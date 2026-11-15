@@ -7,8 +7,9 @@ publish = false
 [dependencies]
 nyseion-http1 = { path = ".." }
 httparse = "1.10"
-# The nyseion-ws parser nyseion-http1 replaces, for comparison and differential tests.
-nyseion-ws = { path = "../../nyseion-ws/wtx", default-features = false, features = ["http1-server-framework", "crypto-ring"] }
+# The nyseion-ws parser nyseion-http1 replaces (its main branch still has it), for comparison and
+# differential tests. From GitHub; Cargo.lock pins the commit.
+nyseion-ws = { git = "https://github.com/vincentmele/nyseion-ws", default-features = false, features = ["http1-server-framework", "crypto-ring"] }
 
 [profile.release]
 codegen-units = 1
