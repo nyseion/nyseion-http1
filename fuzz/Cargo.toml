@@ -1,5 +1,5 @@
 [package]
-name = "rimu-http1-fuzz"
+name = "nyseion-http1-fuzz"
 version = "0.0.0"
 publish = false
 edition = "2024"
@@ -9,7 +9,7 @@ cargo-fuzz = true
 
 [dependencies]
 libfuzzer-sys = "0.4"
-rimu-http1 = { path = ".." }
+nyseion-http1 = { path = ".." }
 
 [[bin]]
 name = "request"

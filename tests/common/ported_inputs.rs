@@ -1,4 +1,4 @@
-//! Every byte-string request of the ported rimu-ws parser tests (extracted from
+//! Every byte-string request of the ported nyseion-ws parser tests (extracted from
 //! `ported_parser.rs`), plus the inputs those tests build with `format!`.
 
 pub const PORTED: &[&[u8]] = &[

@@ -1,14 +1,14 @@
 [package]
-name = "rimu-http1-bench"
+name = "nyseion-http1-bench"
 version = "0.1.0"
 edition = "2024"
 publish = false
 
 [dependencies]
-rimu-http1 = { path = ".." }
+nyseion-http1 = { path = ".." }
 httparse = "1.10"
-# The rimu-ws parser rimu-http1 replaces, for comparison and differential tests.
-rimu-ws = { path = "../../rimu-ws/wtx", default-features = false, features = ["http1-server-framework", "crypto-ring"] }
+# The nyseion-ws parser nyseion-http1 replaces, for comparison and differential tests.
+nyseion-ws = { path = "../../nyseion-ws/wtx", default-features = false, features = ["http1-server-framework", "crypto-ring"] }
 
 [profile.release]
 codegen-units = 1

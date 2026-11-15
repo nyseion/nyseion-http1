@@ -104,20 +104,20 @@ dependencies = [
 ]
 
 [[package]]
-name = "rimu-http1"
+name = "nyseion-http1"
 version = "0.1.0"
 
 [[package]]
-name = "rimu-http1-bench"
+name = "nyseion-http1-bench"
 version = "0.1.0"
 dependencies = [
  "httparse",
- "rimu-http1",
- "rimu-ws",
+ "nyseion-http1",
+ "nyseion-ws",
 ]
 
 [[package]]
-name = "rimu-ws"
+name = "nyseion-ws"
 version = "0.52.1"
 dependencies = [
  "foldhash",
@@ -126,7 +126,7 @@ dependencies = [
  "io-uring",
  "libc",
  "memchr",
- "rimu-ws-macros",
+ "nyseion-ws-macros",
  "ring",
  "simdutf8",
  "socket2",
@@ -134,7 +134,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "rimu-ws-macros"
+name = "nyseion-ws-macros"
 version = "0.12.1"
 dependencies = [
  "proc-macro2",

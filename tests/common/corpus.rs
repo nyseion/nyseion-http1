@@ -1,7 +1,7 @@
 //! Realistic messages, and generators of valid and slightly broken ones.
 
 use super::Rng;
-use rimu_http1::Method;
+use nyseion_http1::Method;
 
 /// Realistic requests, all valid.
 pub fn requests() -> Vec<Vec<u8>> {

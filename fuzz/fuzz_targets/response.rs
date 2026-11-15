@@ -2,7 +2,7 @@
 #![no_main]
 
 use libfuzzer_sys::fuzz_target;
-use rimu_http1::{Config, Error, Method, ResponseParser, Status};
+use nyseion_http1::{Config, Error, Method, ResponseParser, Status};
 
 #[derive(Debug, PartialEq)]
 enum Out {

@@ -1,10 +1,10 @@
-//! Behaviour beyond the ported rimu-ws tests: responses, the rules added here, the API, and the
+//! Behaviour beyond the ported nyseion-ws tests: responses, the rules added here, the API, and the
 //! body decoder's zero-copy and end-of-input handling.
 
 mod common;
 
 use common::{Outcome, req_whole, req_whole_with, res_whole};
-use rimu_http1::{
+use nyseion_http1::{
   BodyDecoder, BodyKind, Config, Decoded, Error, Method, RequestParser, Status, Version,
 };
 
@@ -57,7 +57,7 @@ fn target_bytes() {
 
 #[test]
 fn version_errors_win_over_target_errors() {
-  // As in rimu-ws: the request line is judged once complete, version first.
+  // As in nyseion-ws: the request line is judged once complete, version first.
   assert_eq!(req_err(b"GET www.x HTTP/9.1\r\n\r\n"), Error::VersionNotSupported);
   assert_eq!(req_err(b"BREW / HTTP/9.1\r\n\r\n"), Error::VersionNotSupported);
   assert_eq!(req_err(b"GET  HTTP/9.1\r\n\r\n"), Error::VersionNotSupported);
@@ -427,7 +427,7 @@ fn finish_at_end_of_input() {
   let mut out = Vec::new();
   assert_eq!(
     d.feed(b"all of it", |x| out.extend_from_slice(x)),
-    Ok(rimu_http1::BodyStatus::NeedMore)
+    Ok(nyseion_http1::BodyStatus::NeedMore)
   );
   assert_eq!((d.finish(), out.as_slice()), (Ok(()), &b"all of it"[..]));
   let mut d = BodyDecoder::new(BodyKind::ContentLength(10));

@@ -14,7 +14,7 @@ use crate::{
 /// call `parse` again with the bytes after `head_len`.
 ///
 /// ```
-/// use rimu_http1::{BodyKind, Config, Method, ResponseParser, Status};
+/// use nyseion_http1::{BodyKind, Config, Method, ResponseParser, Status};
 ///
 /// let mut parser = ResponseParser::<16>::new(Config::DEFAULT);
 /// let buf = b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n";

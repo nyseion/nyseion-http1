@@ -522,7 +522,7 @@ pub(crate) mod x86 {
   static LEVEL: AtomicU8 = AtomicU8::new(0);
 
   /// If the long-run kernels may use AVX2: the CPU has it and, with `std`, the
-  /// `RIMU_HTTP1_NO_AVX2` environment variable is not set. Checked once.
+  /// `NYSEION_HTTP1_NO_AVX2` environment variable is not set. Checked once.
   #[cfg(not(target_feature = "avx2"))]
   #[inline(always)]
   pub(crate) fn has_avx2() -> bool {
@@ -537,7 +537,7 @@ pub(crate) mod x86 {
   #[cold]
   fn detect() -> bool {
     #[cfg(feature = "std")]
-    let allowed = std::env::var_os("RIMU_HTTP1_NO_AVX2").is_none();
+    let allowed = std::env::var_os("NYSEION_HTTP1_NO_AVX2").is_none();
     #[cfg(not(feature = "std"))]
     let allowed = true;
     let avx2 = allowed && cpu_has_avx2();

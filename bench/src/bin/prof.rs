@@ -1,5 +1,5 @@
 //! Loops one parser over one head, for `perf record`. Usage: prof <ours|httparse> <case> <secs>
-use rimu_http1::{Config, RequestParser, Status};
+use nyseion_http1::{Config, RequestParser, Status};
 use std::{hint::black_box, time::Instant};
 
 fn main() {

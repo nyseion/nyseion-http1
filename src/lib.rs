@@ -15,7 +15,7 @@
 //! answers with ([`Error::status`]).
 //!
 //! ```
-//! use rimu_http1::{BodyKind, Config, Method, RequestParser, Status};
+//! use nyseion_http1::{BodyKind, Config, Method, RequestParser, Status};
 //!
 //! let mut parser = RequestParser::<64>::new(Config::DEFAULT);
 //! let buf = b"GET /search?q=rust HTTP/1.1\r\nHost: example.com\r\nAccept: */*\r\n\r\n";

@@ -1,21 +1,21 @@
-# rimu-http1 design
+# nyseion-http1 design
 
 A strict, single-pass, resumable, zero-copy, sans-IO HTTP/1.1 head parser (requests and
 responses) with an incremental body decoder. `no_std`, no allocation.
 
-Starting point: the request parser and body decoder of rimu-ws (`wtx/src/http1/parser.rs`,
+Starting point: the request parser and body decoder of nyseion-ws (`wtx/src/http1/parser.rs`,
 `body.rs`). Their tests are the strictness specification and are ported unchanged in meaning.
-What changes is the execution model: the rimu-ws parser is a pure function that re-scans the
+What changes is the execution model: the nyseion-ws parser is a pure function that re-scans the
 whole buffer on every call (a SIMD search for `\r\n\r\n`, a UTF-8 pass, then line splitting:
-three passes, and quadratic when a head arrives in many pieces). rimu-http1 is the state machine
-the rimu-ws spec (§5.2) asked for: it scans every byte once, validating as it goes, and stops
+three passes, and quadratic when a head arrives in many pieces). nyseion-http1 is the state machine
+the nyseion-ws spec (§5.2) asked for: it scans every byte once, validating as it goes, and stops
 exactly where the input ends.
 
 ## 1. Goals and non-goals
 
 Goals, in order:
 
-1. **Strict by default** per RFC 9112 / RFC 9110, rejecting everything the rimu-ws parser rejects
+1. **Strict by default** per RFC 9112 / RFC 9110, rejecting everything the nyseion-ws parser rejects
    (smuggling vectors first), with the error mapped to the status a server answers with.
 2. **Resumable**: the result never depends on how the input was split, and total work is
    O(total bytes) for any split, byte by byte included.
@@ -99,7 +99,7 @@ position only; nothing depends on where the input happens to end. In particular 
 positional (§6): a scan never reads past `line_start + max_line_len + 1` or
 `head_start + max_head_len`, so a too-long line is reported identically whether it arrives
 whole or byte by byte, and an invalid byte beyond the limit is never seen in either case.
-Verdicts that the rimu-ws parser takes after the whole request line (unknown method, target
+Verdicts that the nyseion-ws parser takes after the whole request line (unknown method, target
 form, version) are deferred to the end of the request line here too, so the status codes agree.
 
 ## 4. Scanning and fused validation
@@ -126,7 +126,7 @@ Kernels (`scan.rs`):
 - **x86-64**: SSE2 (baseline) 16 bytes a step, inline. Values and targets are mostly short, so
   the first 64 bytes are always scanned inline with SSE2; only if no stop byte was found there
   does the scan call the AVX2 kernel (32 bytes a step), chosen once at run time with `cpuid`
-  (cached in an `AtomicU8`, as `rimu-json`'s `escape.rs` does) so the out-of-line call is paid
+  (cached in an `AtomicU8`, as `nyseion-json`'s `escape.rs` does) so the out-of-line call is paid
   only by long values (cookies, user agents, tokens). With `target-feature=+avx2` at compile time
   AVX2 is used inline.
 
@@ -205,7 +205,7 @@ pub struct Headers<'b>   // len, get(i), iter() -> Header { name: &str, value: &
   `host:port`. In both cases the bytes after `head_len` belong to the next protocol once the
   server agrees, which the parser cannot know; it reports the framing the headers declare.
 - **Absolute-form** (`GET http://h/p?q`): `path`/`query` come from the target, `Host` is checked
-  and its view is replaced by the target's authority (RFC 9112 §3.2.3), as rimu-ws does.
+  and its view is replaced by the target's authority (RFC 9112 §3.2.3), as nyseion-ws does.
 
 ## 6. Limits
 
@@ -236,7 +236,7 @@ as a bad gateway).
 
 ## 8. Strictness policy
 
-Strict by default; every rejection cites a rule. Carried over from rimu-ws:
+Strict by default; every rejection cites a rule. Carried over from nyseion-ws:
 
 - CRLF only: a bare LF or a CR not followed by LF anywhere in the head is an error
   (RFC 9112 §2.2 allows a recipient to accept a bare LF; we do not, as llhttp's strict mode).
@@ -284,7 +284,7 @@ pub enum BodyStatus { NeedMore, Complete { consumed: usize } }
 
 `decode` consumes framing bytes and returns at most one run of payload as a slice of `input`
 (zero-copy); the caller drops `consumed` bytes and calls again. `feed` loops over `decode` and
-passes each run to `sink` (the rimu-ws `feed(input, &mut Vec)` becomes
+passes each run to `sink` (the nyseion-ws `feed(input, &mut Vec)` becomes
 `feed(input, |d| out.extend_from_slice(d))`). The chunked framing is a byte-wise state machine
 (size, extension grammar, CRLFs, trailers) whose state is a few words, so it resumes at any byte;
 payload is never scanned, only sliced. `UntilClose` returns all input as payload and only
@@ -292,22 +292,22 @@ payload is never scanned, only sliced. `UntilClose` returns all input as payload
 
 ## 10. Verification and benchmarks
 
-- **Ported tests**: all 37 parser tests and 22 body tests of rimu-ws, adapted to the API.
+- **Ported tests**: all 37 parser tests and 22 body tests of nyseion-ws, adapted to the API.
 - **Resumability**: for every test input and a corpus of realistic requests and responses, the
   outcome (all fields, or the exact error) of feeding the bytes split at every offset, at random
   multi-splits and byte by byte equals the outcome of feeding them whole. The same for the body
   decoder (concatenated payload, consumed count, error).
 - **Differential vs httparse**: generated and corpus messages; when both accept, method, target,
   version, status, reason, and every header name/value (after OWS trimming) agree; every class of
-  input rimu-http1 rejects and httparse accepts is tied to an RFC rule (README strictness table).
-- **Differential vs the rimu-ws parser** (in the bench crate, which depends on rimu-ws): accept /
+  input nyseion-http1 rejects and httparse accepts is tied to an RFC rule (README strictness table).
+- **Differential vs the nyseion-ws parser** (in the bench crate, which depends on nyseion-ws): accept /
   reject, status code and fields agree on its test corpus and generated inputs, except for the
-  documented intentional differences (CONNECT / asterisk forms; error precedence where rimu-ws
+  documented intentional differences (CONNECT / asterisk forms; error precedence where nyseion-ws
   checks the whole head first).
 - **Fuzzing**: cargo-fuzz targets (request, response, body, split equivalence) plus a long seeded
   randomized test in the test suite: no panics, and work bounded by the input length.
-- **Benchmarks** (`bench/`): rimu-http1 vs httparse (tokens only; + framing; + validation matching
-  rimu-http1's strictness as closely as practical) vs the rimu-ws parser, on curl GET, plaintext
+- **Benchmarks** (`bench/`): nyseion-http1 vs httparse (tokens only; + framing; + validation matching
+  nyseion-http1's strictness as closely as practical) vs the nyseion-ws parser, on curl GET, plaintext
   GET, POST JSON, browser GET (15 headers), 40 headers and three responses; whole, 4 reads, byte
   by byte; default target (no `target-cpu=native`), pinned to one core. Targets: ≥ httparse on
   whole requests; split cost roughly linear in bytes.

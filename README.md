@@ -1,12 +1,12 @@
-# rimu-http1
+# nyseion-http1
 
 A strict, single-pass, resumable, zero-copy, sans-IO HTTP/1.1 parser for Rust: request and
 response heads, plus an incremental body decoder. `no_std`, no allocation.
 
-Part of the rimu family of performance crates, alongside rimu-ws. Not affiliated with the Rimu template language (`rimu` on crates.io).
+Part of the nyseion family of performance crates, alongside nyseion-ws.
 
 ```rust
-use rimu_http1::{BodyDecoder, BodyKind, BodyStatus, Config, RequestParser, Status};
+use nyseion_http1::{BodyDecoder, BodyKind, BodyStatus, Config, RequestParser, Status};
 
 let mut parser = RequestParser::<64>::new(Config::DEFAULT);
 let mut buf: Vec<u8> = Vec::new();
@@ -67,14 +67,14 @@ plus the body, or the next pipelined request). An error is repeated until `reset
 ## Strictness compared with httparse
 
 httparse is a tokenizer: it splits a head into method, path, version and fields and leaves the
-semantics to the caller. Each row is an input class that rimu-http1 rejects and httparse
+semantics to the caller. Each row is an input class that nyseion-http1 rejects and httparse
 accepts; the differential test (`tests/differential_httparse.rs`) checks that every
 disagreement on about 45 000 corpus, generated and mutated messages falls into one of these
 rows, and that all fields agree exactly when both accept.
 
-| rejected by rimu-http1, accepted by httparse | error (status) | rule |
+| rejected by nyseion-http1, accepted by httparse | error (status) | rule |
 |---|---|---|
-| bare LF line endings (`GET / HTTP/1.1\nHost: a\n\n`) | `InvalidLineEnding` (400) | RFC 9112 §2.2 lets a recipient accept a bare LF; rimu-http1 does not (as llhttp strict) |
+| bare LF line endings (`GET / HTTP/1.1\nHost: a\n\n`) | `InvalidLineEnding` (400) | RFC 9112 §2.2 lets a recipient accept a bare LF; nyseion-http1 does not (as llhttp strict) |
 | more than one empty line before the request line | `InvalidMethod` (400) | RFC 9112 §2.2 asks to skip at least one; exactly one is skipped |
 | fragment in the target (`GET /a#b`) | `InvalidTarget` (400) | RFC 9110 §7.1, RFC 9112 §3.2: a request target has no fragment |
 | raw non-ASCII bytes in the target | `InvalidTarget` (400) | RFC 9112 §3.2 and RFC 3986 §2: URIs are ASCII |
@@ -89,18 +89,18 @@ rows, and that all fields agree exactly when both accept.
 | empty line before a status line | `InvalidVersion` | RFC 9112 §2.2 skips empty lines before request lines only |
 | a line, head or field count over the configured limits | `UriTooLong` (414), `HeadTooLarge`, `TooManyHeaders` (431) | configurable; httparse has no limits besides its slot count |
 
-The other direction: httparse rejects `HTTP/1.2`–`HTTP/1.9`, which rimu-http1 accepts as HTTP/1.1
+The other direction: httparse rejects `HTTP/1.2`–`HTTP/1.9`, which nyseion-http1 accepts as HTTP/1.1
 as RFC 9112 §2.5 asks. httparse also reports a reason phrase with non-ASCII bytes as empty, which
-rimu-http1 returns.
+nyseion-http1 returns.
 
 The body decoder (httparse only offers `parse_chunk_size`) also validates chunk extensions
 against the RFC 9112 §7.1.1 grammar, requires CRLF after every chunk, validates and bounds
 trailer fields, and bounds the chunk-size line.
 
-Compared with the rimu-ws parser it replaces, rimu-http1 keeps every rule (all its tests are
+Compared with the nyseion-ws parser it replaces, nyseion-http1 keeps every rule (all its tests are
 ported) and adds: CONNECT only with authority-form `host:port` and asterisk-form only for
 OPTIONS; an 8 KiB line limit; responses; and errors reported as soon as their bytes arrive
-(rimu-ws waited for the whole head).
+(nyseion-ws waited for the whole head).
 
 ## Performance
 
@@ -108,16 +108,16 @@ OPTIONS; an 8 KiB line limit; responses; and errors reported as soon as their by
 Every contender extracts the same facts (head length, path, query, framing, keep-alive) and
 results are checked to agree before timing. "httparse + framing" adds the path/query split and
 the `Content-Length` / `Transfer-Encoding` / `Connection` lookups; "httparse + strict" adds checks
-that bring it close to rimu-http1's strictness (bare LF, target bytes, UTF-8 values, `Host`
+that bring it close to nyseion-http1's strictness (bare LF, target bytes, UTF-8 values, `Host`
 presence/uniqueness/syntax, `Content-Length` syntax and uniqueness, `Transfer-Encoding: chunked`
 only, not both). The machine was shared and loaded, so contenders are interleaved and the ratios
 are medians of per-round ratios (stable across runs to a few percent); absolute ns are minimums.
 
-Run on an AMD Ryzen 9 5900X (AVX2), 2026-11-13, load average 12 on 24 threads. ns are minimums over 41 interleaved rounds; ratios are medians of per-round ratios (other / rimu-http1, above 1 means rimu-http1 is faster). In the split tables httparse and rimu-ws re-parse from the start on each read; rimu-http1 resumes.
+Run on an AMD Ryzen 9 5900X (AVX2), 2026-11-13, load average 12 on 24 threads. ns are minimums over 41 interleaved rounds; ratios are medians of per-round ratios (other / nyseion-http1, above 1 means nyseion-http1 is faster). In the split tables httparse and nyseion-ws re-parse from the start on each read; nyseion-http1 resumes.
 
 #### Requests, whole
 
-| request | bytes | httparse tokens | httparse + framing | httparse + framing + strict | rimu-ws | **rimu-http1** | vs httparse+framing | vs httparse strict | vs rimu-ws |
+| request | bytes | httparse tokens | httparse + framing | httparse + framing + strict | nyseion-ws | **nyseion-http1** | vs httparse+framing | vs httparse strict | vs nyseion-ws |
 |---|---|---|---|---|---|---|---|---|---|
 | curl GET | 77 | 118 | 144 | 284 | 277 | **80** | 1.13× | 2.23× | 2.20× |
 | plaintext GET | 101 | 134 | 159 | 298 | 270 | **144** | 1.13× | 2.13× | 1.93× |
@@ -127,7 +127,7 @@ Run on an AMD Ryzen 9 5900X (AVX2), 2026-11-13, load average 12 on 24 threads. n
 
 #### Requests, split
 
-| request | bytes | 4 reads: httparse+framing / rimu-ws / **rimu-http1** | byte by byte: httparse+framing / rimu-ws / **rimu-http1** | byte by byte, rimu-http1 ns per byte |
+| request | bytes | 4 reads: httparse+framing / nyseion-ws / **nyseion-http1** | byte by byte: httparse+framing / nyseion-ws / **nyseion-http1** | byte by byte, nyseion-http1 ns per byte |
 |---|---|---|---|---|
 | curl GET | 77 | 266 / 193 / **109** (2.06× / 1.77×) | 7983 / 3032 / **1175** (6.4× / 2.4×) | 15.3 |
 | plaintext GET | 101 | 322 / 229 / **119** (2.26× / 1.81×) | 10460 / 3722 / **1460** (7.3× / 2.6×) | 14.5 |
@@ -135,9 +135,9 @@ Run on an AMD Ryzen 9 5900X (AVX2), 2026-11-13, load average 12 on 24 threads. n
 | browser GET (15 headers) | 805 | 751 / 806 / **301** (2.28× / 2.61×) | 124195 / 79625 / **7187** (20.8× / 9.8×) | 8.9 |
 | 40 custom headers | 2701 | 3124 / 3817 / **1253** (2.45× / 2.99×) | 1012753 / 651682 / **17331** (49.8× / 26.1×) | 6.4 |
 
-#### Responses (rimu-ws has no response parser)
+#### Responses (nyseion-ws has no response parser)
 
-| response | bytes | httparse + framing | **rimu-http1** | ratio | 4 reads: httparse / **rimu-http1** | byte by byte: httparse / **rimu-http1** |
+| response | bytes | httparse + framing | **nyseion-http1** | ratio | 4 reads: httparse / **nyseion-http1** | byte by byte: httparse / **nyseion-http1** |
 |---|---|---|---|---|---|---|
 | small response | 65 | 142 | **86** | 1.62× | 217 / **82** (2.32×) | 5516 / **985** (5.6×) |
 | nginx response | 255 | 148 | **123** | 1.20× | 730 / **343** (2.11×) | 20056 / **1942** (10.9×) |
@@ -145,7 +145,7 @@ Run on an AMD Ryzen 9 5900X (AVX2), 2026-11-13, load average 12 on 24 threads. n
 
 ## Testing
 
-- **Ported tests**: all 37 request-parser tests and 22 body-decoder tests of rimu-ws
+- **Ported tests**: all 37 request-parser tests and 22 body-decoder tests of nyseion-ws
   (`tests/ported_parser.rs`, `tests/ported_body.rs`), plus `tests/semantics.rs` for responses,
   the new rules, limits, the API and the body decoder.
 - **Resumability** (`tests/resumable.rs`): for every ported input, a corpus of realistic
@@ -154,13 +154,13 @@ Run on an AMD Ryzen 9 5900X (AVX2), 2026-11-13, load average 12 on 24 threads. n
   every offset, at random multi-splits and byte by byte, each piece in a newly allocated buffer,
   equals the outcome of the input fed whole. Same for bodies.
 - **Differential vs httparse** (`tests/differential_httparse.rs`): see the strictness table.
-- **Differential vs rimu-ws** (`bench/tests/diff_old.rs`): on about 35 000 inputs, 15 700 accepted
-  by both agree on every field; rejections agree on the status code except where rimu-ws checks
-  the whole head before the request line (UTF-8, size, bare LF) and rimu-http1 reports the first
+- **Differential vs nyseion-ws** (`bench/tests/diff_old.rs`): on about 35 000 inputs, 15 700 accepted
+  by both agree on every field; rejections agree on the status code except where nyseion-ws checks
+  the whole head before the request line (UTF-8, size, bare LF) and nyseion-http1 reports the first
   problem in byte order; the only accept/reject differences are the CONNECT rule above.
 - **Fuzzing**: `fuzz/` has cargo-fuzz targets for requests, responses and bodies that also check
   whole-vs-split equality; `tests/random_bytes.rs` is a seeded randomized test over biased random
-  bytes (`RIMU_HTTP1_RANDOM_ITERS`; run with 40 million inputs per target) and checks that the work
+  bytes (`NYSEION_HTTP1_RANDOM_ITERS`; run with 40 million inputs per target) and checks that the work
   of byte-by-byte feeding is linear.
 
 ## Limitations

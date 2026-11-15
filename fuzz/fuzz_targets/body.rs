@@ -2,7 +2,7 @@
 #![no_main]
 
 use libfuzzer_sys::fuzz_target;
-use rimu_http1::{BodyDecoder, BodyKind, BodyStatus, Config, Error};
+use nyseion_http1::{BodyDecoder, BodyKind, BodyStatus, Config, Error};
 
 fn run(kind: BodyKind, config: &Config, buf: &[u8], stride: usize) -> Result<(Vec<u8>, Option<usize>), Error> {
   let mut d = BodyDecoder::with_config(kind, config);

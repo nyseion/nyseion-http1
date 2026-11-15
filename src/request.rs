@@ -13,7 +13,7 @@ use crate::{
 /// split. After [`Status::Complete`] the next call starts a new message.
 ///
 /// ```
-/// use rimu_http1::{BodyKind, Config, Method, RequestParser, Status};
+/// use nyseion_http1::{BodyKind, Config, Method, RequestParser, Status};
 ///
 /// let mut parser = RequestParser::<16>::new(Config::DEFAULT);
 /// let mut buf = b"POST /orders?id=7 HTTP/1.1\r\nHost: shop\r\nCont".to_vec();

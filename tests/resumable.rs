@@ -12,7 +12,7 @@ use common::{
   ported_inputs::{PORTED, ported_generated},
   req_split_with, req_whole_with, res_split, res_whole,
 };
-use rimu_http1::{BodyKind, Config, Method, RequestParser};
+use nyseion_http1::{BodyKind, Config, Method, RequestParser};
 
 const TIGHT: Config =
   Config { max_head_len: 300, max_line_len: 70, max_headers: 5, allow_extension_methods: false };

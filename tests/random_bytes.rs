@@ -1,16 +1,16 @@
 //! Seeded randomized tests on arbitrary bytes: no panics, invariants hold, results do not depend
 //! on the split, and the work of feeding a head byte by byte is linear.
 //!
-//! `RIMU_HTTP1_RANDOM_ITERS` scales the number of inputs (default 20 000 per test).
+//! `NYSEION_HTTP1_RANDOM_ITERS` scales the number of inputs (default 20 000 per test).
 
 mod common;
 
 use common::{Outcome, Rng, body_split, req_split_with, req_whole_with, res_split, res_whole};
-use rimu_http1::{BodyDecoder, BodyKind, Config, Method, RequestParser, Status};
+use nyseion_http1::{BodyDecoder, BodyKind, Config, Method, RequestParser, Status};
 use std::time::Instant;
 
 fn iters() -> usize {
-  std::env::var("RIMU_HTTP1_RANDOM_ITERS").ok().and_then(|s| s.parse().ok()).unwrap_or(20_000)
+  std::env::var("NYSEION_HTTP1_RANDOM_ITERS").ok().and_then(|s| s.parse().ok()).unwrap_or(20_000)
 }
 
 /// Random bytes, biased towards the bytes HTTP heads are made of so that parsing gets deep.

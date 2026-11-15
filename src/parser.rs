@@ -571,7 +571,7 @@ impl<const N: usize, const REQ: bool> Core<N, REQ> {
     }
   }
 
-  /// End of the request line: verdicts on the target and the method, which rimu-ws takes once
+  /// End of the request line: verdicts on the target and the method, which nyseion-ws takes once
   /// the whole line is known to be well formed (so a bad version wins over a bad target).
   fn request_line(&mut self, buf: &[u8]) -> Result<(), Error> {
     let ts = self.target_start as usize;

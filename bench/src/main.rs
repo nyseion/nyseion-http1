@@ -1,9 +1,9 @@
-//! rimu-http1 vs httparse vs the rimu-ws parser, on whole and split heads.
+//! nyseion-http1 vs httparse vs the nyseion-ws parser, on whole and split heads.
 //!
-//! Run pinned to one core: `taskset -c 7 target/release/rimu-http1-bench`.
+//! Run pinned to one core: `taskset -c 7 target/release/nyseion-http1-bench`.
 //! Every contender extracts the same facts (head length, path, query, body framing,
 //! keep-alive) and the results are checked to agree before timing.
-use rimu_http1::{BodyKind, Config, Method, RequestParser, ResponseParser, Status};
+use nyseion_http1::{BodyKind, Config, Method, RequestParser, ResponseParser, Status};
 use std::{hint::black_box, time::Instant};
 
 /// Times the contenders interleaved: 41 rounds, each running every contender for ~2 ms.
@@ -109,7 +109,7 @@ fn host_ok(v: &[u8]) -> bool {
     })
 }
 
-/// httparse + framing + the checks that make it about as strict as rimu-http1: no bare LF, a
+/// httparse + framing + the checks that make it about as strict as nyseion-http1: no bare LF, a
 /// target without `#` or raw non-ASCII, UTF-8 values, `Host` required once and valid,
 /// `Content-Length` digits only and once, `Transfer-Encoding` exactly `chunked`, not both.
 /// (Still laxer: obs-fold/target forms/method set/limits are not re-checked.)
@@ -196,8 +196,8 @@ fn ours(parser: &mut RequestParser, buf: &[u8]) -> Option<Facts> {
   }
 }
 
-fn old(buf: &[u8], scratch: &mut rimu_ws::http1::ParseScratch) -> Option<Facts> {
-  use rimu_ws::http1::{BodyKind as K, ParseOutcome, parse_request};
+fn old(buf: &[u8], scratch: &mut nyseion_ws::http1::ParseScratch) -> Option<Facts> {
+  use nyseion_ws::http1::{BodyKind as K, ParseOutcome, parse_request};
   match parse_request(buf, scratch).ok()? {
     ParseOutcome::Partial => None,
     ParseOutcome::Complete { request, head_len } => {
@@ -285,15 +285,15 @@ fn main() {
   ];
 
   println!(
-    "ns per head: minimum over 41 interleaved rounds; ratios: median over rounds of other / rimu-http1 (>1: rimu-http1 faster). One core. `4 reads` / `byte by byte`: the head arrives in 4 / len reads and every parser is called after each read (httparse and rimu-ws re-parse from the start; rimu-http1 resumes).\n"
+    "ns per head: minimum over 41 interleaved rounds; ratios: median over rounds of other / nyseion-http1 (>1: nyseion-http1 faster). One core. `4 reads` / `byte by byte`: the head arrives in 4 / len reads and every parser is called after each read (httparse and nyseion-ws re-parse from the start; nyseion-http1 resumes).\n"
   );
   println!("### Requests, whole\n");
   println!(
-    "| request | bytes | httparse tokens | httparse + framing | httparse + framing + strict | rimu-ws | **rimu-http1** | vs httparse+framing | vs httparse strict | vs rimu-ws |"
+    "| request | bytes | httparse tokens | httparse + framing | httparse + framing + strict | nyseion-ws | **nyseion-http1** | vs httparse+framing | vs httparse strict | vs nyseion-ws |"
   );
   println!("|---|---|---|---|---|---|---|---|---|---|");
   let mut parser = RequestParser::<64>::new(Config::DEFAULT);
-  let mut scratch = rimu_ws::http1::ParseScratch::new();
+  let mut scratch = nyseion_ws::http1::ParseScratch::new();
   let mut split_rows = Vec::new();
   for (name, req) in &cases {
     let buf = req.as_bytes();
@@ -333,7 +333,7 @@ fn main() {
   }
   println!("\n### Requests, split\n");
   println!(
-    "| request | bytes | 4 reads: httparse+framing / rimu-ws / **rimu-http1** | byte by byte: httparse+framing / rimu-ws / **rimu-http1** | byte by byte, rimu-http1 ns per byte |"
+    "| request | bytes | 4 reads: httparse+framing / nyseion-ws / **nyseion-http1** | byte by byte: httparse+framing / nyseion-ws / **nyseion-http1** | byte by byte, nyseion-http1 ns per byte |"
   );
   println!("|---|---|---|---|---|");
   for (name, len, row) in split_rows {
@@ -354,9 +354,9 @@ fn main() {
       rb.0 / len as f64
     );
   }
-  println!("\n### Responses (rimu-ws has no response parser)\n");
+  println!("\n### Responses (nyseion-ws has no response parser)\n");
   println!(
-    "| response | bytes | httparse + framing | **rimu-http1** | ratio | 4 reads: httparse / **rimu-http1** | byte by byte: httparse / **rimu-http1** |"
+    "| response | bytes | httparse + framing | **nyseion-http1** | ratio | 4 reads: httparse / **nyseion-http1** | byte by byte: httparse / **nyseion-http1** |"
   );
   println!("|---|---|---|---|---|---|---|");
   let mut rparser = ResponseParser::<64>::new(Config::DEFAULT);

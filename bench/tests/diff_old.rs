@@ -1,14 +1,14 @@
-//! Differential test against the rimu-ws parser that rimu-http1 replaces
-//! (`rimu_ws::http1::parse_request`), on its test corpus (the ported inputs), the realistic
+//! Differential test against the nyseion-ws parser that nyseion-http1 replaces
+//! (`nyseion_ws::http1::parse_request`), on its test corpus (the ported inputs), the realistic
 //! corpus, generated requests and mutated ones.
 //!
 //! - When both accept: method, version, path, query, every field, framing, keep-alive and head
 //!   length agree exactly.
 //! - Accept/reject disagreements must be one of the intended changes:
 //!   CONNECT only with authority-form `host:port` and asterisk-form only for OPTIONS
-//!   (RFC 9112 §3.2.3–3.2.4), and the 8 KiB line limit (rimu-ws: 16 KiB for the head only).
-//! - When both reject, the status codes agree, except where rimu-ws checks the whole head
-//!   before the request line (UTF-8, head size, bare LF) and rimu-http1 reports the first
+//!   (RFC 9112 §3.2.3–3.2.4), and the 8 KiB line limit (nyseion-ws: 16 KiB for the head only).
+//! - When both reject, the status codes agree, except where nyseion-ws checks the whole head
+//!   before the request line (UTF-8, head size, bare LF) and nyseion-http1 reports the first
 //!   problem in byte order.
 //!
 //! Run with `--nocapture` to see the tallies.
@@ -22,8 +22,8 @@ use common::{
   ported_inputs::{PORTED, ported_generated},
   req_whole,
 };
-use rimu_http1::{BodyKind, Error};
-use rimu_ws::http1::{
+use nyseion_http1::{BodyKind, Error};
+use nyseion_ws::http1::{
   BodyKind as OldKind, ParseOutcome, ParseScratch, error_status, parse_request,
 };
 use std::collections::BTreeMap;
@@ -47,7 +47,7 @@ fn old(buf: &[u8]) -> Result<Option<Old>, u16> {
     Ok(ParseOutcome::Partial) => Ok(None),
     Ok(ParseOutcome::Complete { request, head_len }) => Ok(Some(Old {
       method: format!("{:?}", request.method).to_uppercase(),
-      http10: request.version == rimu_ws::http::Version::Http1,
+      http10: request.version == nyseion_ws::http::Version::Http1,
       path: request.path.into(),
       query: request.query.into(),
       headers: request.headers.iter().map(|(n, v)| ((*n).into(), (*v).into())).collect(),
@@ -87,7 +87,7 @@ fn compare(buf: &[u8], tally: &mut BTreeMap<String, usize>) {
       let r: &Req = r;
       let mine = Old {
         method: r.method_str.clone(),
-        http10: r.version == rimu_http1::Version::Http10,
+        http10: r.version == nyseion_http1::Version::Http10,
         path: r.path.clone(),
         query: r.query.clone(),
         headers: r.headers.clone(),
@@ -111,40 +111,40 @@ fn compare(buf: &[u8], tally: &mut BTreeMap<String, usize>) {
         {
           "line over the 8 KiB line limit"
         }
-        _ => panic!("unexplained: rimu-http1 {e:?}, rimu-ws accepts {}", show(buf)),
+        _ => panic!("unexplained: nyseion-http1 {e:?}, nyseion-ws accepts {}", show(buf)),
       };
-      format!("rimu-http1 rejects, rimu-ws accepts: {c}")
+      format!("nyseion-http1 rejects, nyseion-ws accepts: {c}")
     }
-    (Outcome::Complete(_), Err(s)) => panic!("rimu-ws {s}, rimu-http1 accepts {}", show(buf)),
+    (Outcome::Complete(_), Err(s)) => panic!("nyseion-ws {s}, nyseion-http1 accepts {}", show(buf)),
     (Outcome::Error(e), Err(s)) if e.status() == *s => "both reject, same status".to_string(),
     (Outcome::Error(e), Err(s)) => {
       let head = head_of(buf);
       let c = if std::str::from_utf8(head).is_err() {
-        "rimu-ws checks UTF-8 of the whole head first"
+        "nyseion-ws checks UTF-8 of the whole head first"
       } else if *s == 431 || *s == 414 {
-        "rimu-ws checks the head size first"
+        "nyseion-ws checks the head size first"
       } else if has_bare_lf(head) {
-        "rimu-ws checks bare LF in the whole head first"
+        "nyseion-ws checks bare LF in the whole head first"
       } else if *e == Error::InvalidTarget
         && (buf.starts_with(b"CONNECT ") || buf.windows(3).any(|w| w == b" * "))
       {
         "CONNECT / asterisk-form rule, judged before a later error"
       } else {
-        panic!("statuses differ: rimu-http1 {e:?} ({}), rimu-ws {s}: {}", e.status(), show(buf))
+        panic!("statuses differ: nyseion-http1 {e:?} ({}), nyseion-ws {s}: {}", e.status(), show(buf))
       };
       format!("both reject, status differs: {c}")
     }
     (Outcome::Partial, Ok(None)) => "both partial".to_string(),
-    // rimu-http1 reports an error as soon as its bytes arrive; rimu-ws once the head is whole.
-    (Outcome::Error(_), Ok(None)) => "rimu-http1 rejects early, rimu-ws partial".to_string(),
+    // nyseion-http1 reports an error as soon as its bytes arrive; nyseion-ws once the head is whole.
+    (Outcome::Error(_), Ok(None)) => "nyseion-http1 rejects early, nyseion-ws partial".to_string(),
     (Outcome::Partial, Err(s)) => {
-      // rimu-ws rejects a bare LF or an oversized buffer before the head is complete.
+      // nyseion-ws rejects a bare LF or an oversized buffer before the head is complete.
       assert!(
         has_bare_lf(buf) || *s == 431 || *s == 414,
-        "rimu-ws {s}, rimu-http1 partial {}",
+        "nyseion-ws {s}, nyseion-http1 partial {}",
         show(buf)
       );
-      "rimu-ws rejects early (bare LF / size), rimu-http1 partial".to_string()
+      "nyseion-ws rejects early (bare LF / size), nyseion-http1 partial".to_string()
     }
     (Outcome::Partial, Ok(Some(_))) | (Outcome::Complete(_), Ok(None)) => {
       panic!("completion differs {new:?} {theirs:?} {}", show(buf))
@@ -154,7 +154,7 @@ fn compare(buf: &[u8], tally: &mut BTreeMap<String, usize>) {
 }
 
 #[test]
-fn agrees_with_rimu_ws() {
+fn agrees_with_nyseion_ws() {
   let mut rng = Rng(21);
   let mut tally = BTreeMap::new();
   let mut seeds: Vec<Vec<u8>> = PORTED.iter().map(|b| b.to_vec()).collect();

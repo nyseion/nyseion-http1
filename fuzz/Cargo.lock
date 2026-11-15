@@ -76,15 +76,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f8dcc9c7d52a811697d2151c701e0d08956f92b0e24136cf4cf27b57a6a0d9bf"
 
 [[package]]
-name = "rimu-http1"
+name = "nyseion-http1"
 version = "0.1.0"
 
 [[package]]
-name = "rimu-http1-fuzz"
+name = "nyseion-http1-fuzz"
 version = "0.0.0"
 dependencies = [
  "libfuzzer-sys",
- "rimu-http1",
+ "nyseion-http1",
 ]
 
 [[package]]

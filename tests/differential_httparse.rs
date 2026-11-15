@@ -2,7 +2,7 @@
 //!
 //! - When both accept, method, target, version, status, reason, head length and every field
 //!   (name, and value after OWS trimming) agree exactly. (One documented difference: for an
-//!   absolute-form target rimu-http1 reports the target's authority as `Host`.)
+//!   absolute-form target nyseion-http1 reports the target's authority as `Host`.)
 //! - Every input that one accepts and the other rejects must fall in a category of the README's
 //!   strictness table; an unexplained disagreement fails the test.
 //!
@@ -16,7 +16,7 @@ use common::{
   ported_inputs::{PORTED, ported_generated},
   req_whole, res_whole,
 };
-use rimu_http1::{Error, Method, Version};
+use nyseion_http1::{Error, Method, Version};
 use std::collections::BTreeMap;
 
 #[derive(Debug)]
@@ -55,7 +55,7 @@ fn httparse_req(buf: &[u8]) -> Result<Option<HReq>, httparse::Error> {
   })
 }
 
-/// The README category of an input rimu-http1 rejects and httparse accepts, from rimu-http1's
+/// The README category of an input nyseion-http1 rejects and httparse accepts, from nyseion-http1's
 /// error and the bytes. `None`: unexplained.
 fn reject_category(err: Error, buf: &[u8], h: &HReq) -> Option<&'static str> {
   let target = h.target.as_bytes();
@@ -100,7 +100,7 @@ fn reject_category(err: Error, buf: &[u8], h: &HReq) -> Option<&'static str> {
   })
 }
 
-/// Category of an input rimu-http1 accepts and httparse rejects.
+/// Category of an input nyseion-http1 accepts and httparse rejects.
 fn accept_category(req: &Req, err: httparse::Error) -> Option<&'static str> {
   match err {
     httparse::Error::Version if req.version == Version::Http11 => {
@@ -132,28 +132,28 @@ fn compare_request(buf: &[u8], tally: &mut BTreeMap<String, usize>) {
       "both accept: fields agree".to_string()
     }
     (Outcome::Error(e), Ok(Some(h))) => match reject_category(*e, buf, h) {
-      Some(c) => format!("rimu-http1 rejects: {c}"),
+      Some(c) => format!("nyseion-http1 rejects: {c}"),
       None => {
-        panic!("unexplained: rimu-http1 {e:?}, httparse accepts {:?}", show(buf))
+        panic!("unexplained: nyseion-http1 {e:?}, httparse accepts {:?}", show(buf))
       }
     },
     (Outcome::Complete(r), Err(e)) => match accept_category(r, *e) {
       Some(c) => format!("httparse rejects: {c}"),
       None => {
-        panic!("unexplained: httparse {e:?}, rimu-http1 accepts {:?}", show(buf))
+        panic!("unexplained: httparse {e:?}, nyseion-http1 accepts {:?}", show(buf))
       }
     },
     (Outcome::Error(_), Err(_)) => "both reject".to_string(),
     (Outcome::Partial, Ok(None)) => "both partial".to_string(),
-    // rimu-http1 reports errors as soon as they arrive; httparse may still wait.
-    (Outcome::Error(_), Ok(None)) => "rimu-http1 rejects early, httparse partial".to_string(),
-    // rimu-http1 judges a method that is not a token once the request line is complete (as
-    // rimu-ws does, so a bad version still answers 505); httparse rejects at the byte.
+    // nyseion-http1 reports errors as soon as they arrive; httparse may still wait.
+    (Outcome::Error(_), Ok(None)) => "nyseion-http1 rejects early, httparse partial".to_string(),
+    // nyseion-http1 judges a method that is not a token once the request line is complete (as
+    // nyseion-ws does, so a bad version still answers 505); httparse rejects at the byte.
     (Outcome::Partial, Err(httparse::Error::Token)) if !buf.contains(&b'\n') => {
-      "httparse rejects a bad method byte early, rimu-http1 at the end of the line".to_string()
+      "httparse rejects a bad method byte early, nyseion-http1 at the end of the line".to_string()
     }
     (Outcome::Partial, Err(e)) => {
-      panic!("httparse {e:?}, rimu-http1 partial {:?}", show(buf))
+      panic!("httparse {e:?}, nyseion-http1 partial {:?}", show(buf))
     }
     (Outcome::Partial, Ok(Some(_))) | (Outcome::Complete(_), Ok(None)) => {
       panic!("completion differs {ours:?} {theirs:?} {:?}", show(buf))
@@ -261,21 +261,21 @@ fn compare_response(method: Method, buf: &[u8], tally: &mut BTreeMap<String, usi
         Error::InvalidTransferEncoding => {
           "Transfer-Encoding with chunked twice or not last (RFC 9112 §6.1)"
         }
-        _ => panic!("unexplained: rimu-http1 {e:?}, httparse accepts {:?}", show(buf)),
+        _ => panic!("unexplained: nyseion-http1 {e:?}, httparse accepts {:?}", show(buf)),
       };
-      format!("rimu-http1 rejects: {c}")
+      format!("nyseion-http1 rejects: {c}")
     }
     (Outcome::Complete(r), Err(e)) => match e {
       httparse::Error::Version if r.version == Version::Http11 => {
         "httparse rejects: HTTP/1.2..1.9 (RFC 9112 §2.5 treats them as 1.1)".to_string()
       }
       _ => {
-        panic!("unexplained: httparse {e:?}, rimu-http1 accepts {:?}", show(buf))
+        panic!("unexplained: httparse {e:?}, nyseion-http1 accepts {:?}", show(buf))
       }
     },
     (Outcome::Error(_), Err(_)) => "both reject".to_string(),
     (Outcome::Partial, Ok(None)) => "both partial".to_string(),
-    (Outcome::Error(_), Ok(None)) => "rimu-http1 rejects early, httparse partial".to_string(),
+    (Outcome::Error(_), Ok(None)) => "nyseion-http1 rejects early, httparse partial".to_string(),
     (a, b) => panic!("outcomes differ {a:?} {b:?} {:?}", show(buf)),
   };
   *tally.entry(key).or_insert(0) += 1;

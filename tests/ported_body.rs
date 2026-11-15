@@ -1,13 +1,13 @@
-//! Every test of the rimu-ws body decoder (`wtx/src/http1/body.rs`), adapted to this API: the
-//! `feed(input, &mut Vec)` of rimu-ws is `feed(input, |data| out.extend_from_slice(data))`.
+//! Every test of the nyseion-ws body decoder (`wtx/src/http1/body.rs`), adapted to this API: the
+//! `feed(input, &mut Vec)` of nyseion-ws is `feed(input, |data| out.extend_from_slice(data))`.
 
-use rimu_http1::{BodyDecoder, BodyKind, BodyStatus};
+use nyseion_http1::{BodyDecoder, BodyKind, BodyStatus};
 
 fn feed(
   decoder: &mut BodyDecoder,
   input: &[u8],
   out: &mut Vec<u8>,
-) -> Result<BodyStatus, rimu_http1::Error> {
+) -> Result<BodyStatus, nyseion_http1::Error> {
   decoder.feed(input, |d| out.extend_from_slice(d))
 }
 

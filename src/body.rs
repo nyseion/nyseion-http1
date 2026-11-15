@@ -31,7 +31,7 @@ pub enum BodyStatus {
 /// input instead of copied.
 ///
 /// ```
-/// use rimu_http1::{BodyDecoder, BodyKind, BodyStatus};
+/// use nyseion_http1::{BodyDecoder, BodyKind, BodyStatus};
 ///
 /// let mut decoder = BodyDecoder::new(BodyKind::Chunked);
 /// let mut out = Vec::new();

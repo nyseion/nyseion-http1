@@ -1,11 +1,11 @@
-//! Every test of the rimu-ws request parser (`wtx/src/http1/parser.rs`), adapted to this API.
+//! Every test of the nyseion-ws request parser (`wtx/src/http1/parser.rs`), adapted to this API.
 //! The rules they encode are this crate's strictness baseline. (`simd_scans_match_scalar` is
 //! the unit test `scan::tests::kernels_match_scalar`.)
 
 mod common;
 
 use common::{Outcome, err_status, is_err, req_whole};
-use rimu_http1::{BodyKind, Config, Method, RequestParser, Status, Version};
+use nyseion_http1::{BodyKind, Config, Method, RequestParser, Status, Version};
 
 const GET: &[u8] = b"GET /baseline11?a=13&b=42 HTTP/1.1\r\nHost: localhost:8080\r\n\r\n";
 const POST_CL: &[u8] =
@@ -266,8 +266,8 @@ fn absolute_form_authority_with_userinfo_or_fragment_is_refused() {
   // `@` and `#` after the authority are the path's or the query's, not the authority's
   let (_, path, query, ..) = complete(b"GET http://h/a@b?x=y@z HTTP/1.1\r\nHost: a\r\n\r\n");
   assert_eq!((path.as_str(), query.as_str()), ("/a@b", "x=y@z"));
-  // Changed from rimu-ws: the target is judged as soon as the request line is complete, not
-  // once the whole head is (rimu-ws answered Partial here and 400 later).
+  // Changed from nyseion-ws: the target is judged as soon as the request line is complete, not
+  // once the whole head is (nyseion-ws answered Partial here and 400 later).
   assert_eq!(
     req_whole(b"GET http://u@h/x HTTP/1.1\r\nHost: a\r\n").err().map(|e| e.status()),
     Some(400)
@@ -440,7 +440,7 @@ fn bare_lf_request_is_rejected() {
   assert!(is_err(b"GET / HTTP/1.1\nHost: a\n\n"));
 }
 
-// The ported tests above used the default limits; they match rimu-ws's 64 headers.
+// The ported tests above used the default limits; they match nyseion-ws's 64 headers.
 #[test]
 fn default_limits() {
   assert_eq!(Config::DEFAULT.max_headers as usize, MAX_HEADERS);
